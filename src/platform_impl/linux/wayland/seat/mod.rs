@@ -11,6 +11,7 @@ use sctk::reexports::client::protocol::wl_touch::WlTouch;
 use sctk::reexports::client::{Connection, Proxy, QueueHandle};
 use sctk::reexports::protocols::wp::relative_pointer::zv1::client::zwp_relative_pointer_v1::ZwpRelativePointerV1;
 use sctk::reexports::protocols::wp::text_input::zv3::client::zwp_text_input_v3::ZwpTextInputV3;
+use wayland_protocols::wp::pointer_gestures::zv1::client::zwp_pointer_gesture_pinch_v1::ZwpPointerGesturePinchV1;
 
 use sctk::seat::pointer::{ThemeSpec, ThemedPointer};
 use sctk::seat::{Capability as SeatCapability, SeatHandler, SeatState};
@@ -24,6 +25,7 @@ mod pointer;
 mod text_input;
 mod touch;
 
+pub use pointer::pointer_gesture::{PinchData, PointerGesturesState};
 pub use pointer::relative_pointer::RelativePointerState;
 pub use pointer::{PointerConstraintsState, WinitPointerData, WinitPointerDataExt};
 pub use text_input::{TextInputState, ZwpTextInputV3Ext};
@@ -48,6 +50,9 @@ pub struct WinitSeatState {
 
     /// The relative pointer bound on the seat.
     relative_pointer: Option<ZwpRelativePointerV1>,
+
+    /// The pinch gesture associated with this seat's pointer.
+    pointer_gesture_pinch: Option<ZwpPointerGesturePinchV1>,
 
     /// The keyboard bound on the seat.
     keyboard_state: Option<KeyboardState>,
@@ -122,6 +127,14 @@ impl SeatHandler for WinitState {
                     )
                 });
 
+                seat_state.pointer_gesture_pinch = self.pointer_gestures.as_ref().map(|manager| {
+                    manager.get_pinch_gesture(
+                        themed_pointer.pointer(),
+                        queue_handle,
+                        PinchData::default(),
+                    )
+                });
+
                 let themed_pointer = Arc::new(themed_pointer);
 
                 // Register cursor surface.
@@ -173,6 +186,9 @@ impl SeatHandler for WinitState {
             SeatCapability::Pointer => {
                 if let Some(relative_pointer) = seat_state.relative_pointer.take() {
                     relative_pointer.destroy();
+                }
+                if let Some(pinch) = seat_state.pointer_gesture_pinch.take() {
+                    pinch.destroy();
                 }
 
                 if let Some(pointer) = seat_state.pointer.take() {
